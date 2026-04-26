@@ -5,7 +5,7 @@
 This script:
 • Highlights players you can tag
 • Only activates when YOU are the tagger
-• Turns red when a target is within tagging distance
+• Uses colors to show cooldown, no-tagback, or taggable state
 ====================================================
 ]]
 
@@ -48,6 +48,7 @@ RunService.RenderStepped:Connect(function()
 
 	local targetPlayer = Players:GetPlayerFromCharacter(character)
 	if not targetPlayer or targetPlayer == player then return clear() end
+	if targetPlayer:GetAttribute("IsInvisible") then return clear() end
 
 	local pRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	local tRoot = character:FindFirstChild("HumanoidRootPart")
@@ -58,18 +59,15 @@ RunService.RenderStepped:Connect(function()
 		return clear()
 	end
 
-	-- Valid target → show red highlight
+	local now = tick()
+	local noTagBackEndsAt = targetPlayer:GetAttribute("NoTagBackEndsAt") or 0
+
+	if now < noTagBackEndsAt then
+		highlight.FillColor = Color3.fromRGB(255, 0, 0)
+	else
+		highlight.FillColor = Color3.fromRGB(0, 255, 0)
+	end
+
 	highlight.Adornee = character
-	highlight.FillColor = Color3.fromRGB(255, 0, 0)
 	highlight.Enabled = true
 end)
-
-
---[[-- COLOR LOGIC
-	if not _G.cooldownReady then
-		highlight.FillColor = Color3.fromRGB(255, 255, 0) -- YELLOW (cooldown)
-	elseif not _G.tagbackReady then
-		highlight.FillColor = Color3.fromRGB(0, 0, 255) -- BLUE (no tagback)
-	else
-		highlight.FillColor = Color3.fromRGB(255, 0, 0) -- RED (taggable)
-	end]]

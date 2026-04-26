@@ -15,8 +15,21 @@ This script manages:
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local function getOrCreateRemoteEvent(name)
+	local remote = ReplicatedStorage:FindFirstChild(name)
+	if remote and remote:IsA("RemoteEvent") then
+		return remote
+	end
+
+	remote = Instance.new("RemoteEvent")
+	remote.Name = name
+	remote.Parent = ReplicatedStorage
+	return remote
+end
+
 local tagEvent = ReplicatedStorage:WaitForChild("TagEvent")
 local roleEvent = ReplicatedStorage:WaitForChild("RoleEvent")
+local cooldownEvent = getOrCreateRemoteEvent("CooldownEvent")
 
 --==================================================
 --                 GAME CONSTANTS
@@ -24,14 +37,41 @@ local roleEvent = ReplicatedStorage:WaitForChild("RoleEvent")
 
 local itPlayer = nil                         -- Current tagger
 local MAX_TAG_DISTANCE = 5                   -- Max distance allowed for tagging
-local TAG_COOLDOWN = 1                       -- Time before tagger can tag again
 local NO_TAG_BACK_TIME = 3                   -- Prevent immediate tagback
 
-local lastTagTime = {}                       -- Tracks tagger cooldown
 local lastTagged = {}                        -- Tracks tagback protection
 
 local ROLE_TAGGER = "Tagger"
 local ROLE_SURVIVOR = "Survivor"
+
+local function getTagCooldownEndsAt(player)
+	return player:GetAttribute("TagCooldownEndsAt") or 0
+end
+
+local function getNoTagBackEndsAt(player)
+	return player:GetAttribute("NoTagBackEndsAt") or 0
+end
+
+local function setTagCooldownEndsAt(player, expiresAt)
+	player:SetAttribute("TagCooldownEndsAt", expiresAt)
+end
+
+local function setNoTagBackEndsAt(player, expiresAt)
+	player:SetAttribute("NoTagBackEndsAt", expiresAt)
+end
+
+local function resetTagState(player)
+	lastTagged[player] = nil
+	setTagCooldownEndsAt(player, 0)
+	setNoTagBackEndsAt(player, 0)
+end
+
+local function sendCooldownStatus(player)
+	cooldownEvent:FireClient(player, {
+		cooldownEndsAt = getTagCooldownEndsAt(player),
+		noTagBackEndsAt = getNoTagBackEndsAt(player),
+	})
+end
 
 --==================================================
 --               ROLE UPDATE FUNCTION
@@ -41,10 +81,14 @@ local function updateAllRoles()
 	-- Sends each player their correct role
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p == itPlayer then
+			p:SetAttribute("Role", ROLE_TAGGER)
 			roleEvent:FireClient(p, ROLE_TAGGER)
 		else
+			p:SetAttribute("Role", ROLE_SURVIVOR)
 			roleEvent:FireClient(p, ROLE_SURVIVOR)
 		end
+
+		sendCooldownStatus(p)
 	end
 end
 
@@ -67,6 +111,8 @@ end
 --==================================================
 
 Players.PlayerAdded:Connect(function(player)
+	setTagCooldownEndsAt(player, 0)
+	setNoTagBackEndsAt(player, 0)
 	player.CharacterAdded:Wait() -- Ensures character exists before role assignment
 	assignTaggerIfNeeded()
 	updateAllRoles()
@@ -75,6 +121,7 @@ end)
 Players.PlayerRemoving:Connect(function(player)
 	task.defer(function()
 		local players = Players:GetPlayers()
+		resetTagState(player)
 
 		-- If the tagger leaves, choose a new one (if enough players remain)
 		if player == itPlayer then
@@ -111,16 +158,19 @@ tagEvent.OnServerEvent:Connect(function(player, targetPlayer)
 
 	local now = tick()
 
-	-- Tag cooldown check
-	if lastTagTime[player] and now - lastTagTime[player] < TAG_COOLDOWN then return end
-	lastTagTime[player] = now
-
 	-- No tagback check
-	if lastTagged[targetPlayer] and now - lastTagged[targetPlayer] < NO_TAG_BACK_TIME then return end
-	lastTagged[player] = now
+	if now < getNoTagBackEndsAt(targetPlayer) then return end
+
+	local previousTagger = player
+	local newTagger = targetPlayer
+
+	resetTagState(previousTagger)
+	resetTagState(newTagger)
+	lastTagged[previousTagger] = now
+	setNoTagBackEndsAt(previousTagger, now + NO_TAG_BACK_TIME)
 
 	-- Successful tag → new tagger
-	itPlayer = targetPlayer
+	itPlayer = newTagger
 	updateAllRoles()
 end)
 
