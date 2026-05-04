@@ -5,7 +5,7 @@ local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
 local INVISIBILITY_DURATION = 3
-local INVISIBILITY_COOLDOWN = 10
+local INVISIBILITY_COOLDOWN = 20
 local SHOVE_COOLDOWN = 2
 local BAR_RIGHT_OFFSET = -24
 local BAR_BOTTOM_OFFSET = -24

@@ -31,6 +31,14 @@ local function clearMaps(folder)
 	end
 end
 
+local function removeExternalSpawnLocations(mapsFolder)
+	for _, descendant in ipairs(Workspace:GetDescendants()) do
+		if descendant:IsA("SpawnLocation") and not descendant:IsDescendantOf(mapsFolder) then
+			descendant:Destroy()
+		end
+	end
+end
+
 local function loadMap(mapName)
 	local mapsFolder = ensureMapsFolder()
 	clearMaps(mapsFolder)
@@ -47,6 +55,7 @@ local function loadMap(mapName)
 	local builder = Builder.new(mapModel)
 	builder:ApplyLighting(definition.lighting)
 	builder:BuildMap(definition)
+	removeExternalSpawnLocations(mapsFolder)
 
 	Workspace:SetAttribute("CurrentMapName", definition.name)
 	Workspace:SetAttribute("CurrentMapTheme", definition.theme)

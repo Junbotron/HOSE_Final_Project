@@ -16,7 +16,7 @@ end
 local requestEvent = getOrCreateRemoteEvent("InvisibilityRequestEvent")
 
 local INVISIBILITY_DURATION = 3
-local INVISIBILITY_COOLDOWN = 10
+local INVISIBILITY_COOLDOWN = 20
 local activeTokens = {}
 local originalDisplayDistanceType = {}
 local originalHealthDisplayType = {}

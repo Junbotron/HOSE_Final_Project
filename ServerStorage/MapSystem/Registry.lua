@@ -25,7 +25,7 @@ local BUILTIN_DEFINITIONS = {
 				size = Vector3.new(160, 1, 120),
 				wallHeight = 42,
 				floorMaterial = Enum.Material.SmoothPlastic,
-				floorColor = Color3.fromRGB(236, 236, 236),
+				floorColor = Color3.fromRGB(166, 166, 166),
 				wallMaterial = Enum.Material.SmoothPlastic,
 				wallColor = Color3.fromRGB(247, 247, 247),
 				ceilingMaterial = Enum.Material.SmoothPlastic,
@@ -87,6 +87,10 @@ local BUILTIN_DEFINITIONS = {
 			{ name = "CrateLine_2", position = Vector3.new(8, 1.5, -12), size = Vector3.new(4, 3, 4), material = Enum.Material.WoodPlanks, color = Color3.fromRGB(173, 149, 110) },
 			{ name = "CrateLine_3", position = Vector3.new(24, 1.5, 14), size = Vector3.new(5, 3, 5), material = Enum.Material.WoodPlanks, color = Color3.fromRGB(173, 149, 110) },
 			{ name = "CrateLine_4", position = Vector3.new(-26, 1.5, -14), size = Vector3.new(5, 3, 5), material = Enum.Material.WoodPlanks, color = Color3.fromRGB(173, 149, 110) },
+			{ name = "SpawnBox_WestWall", position = Vector3.new(-76, 3, 0), size = Vector3.new(1, 6, 16), material = Enum.Material.SmoothPlastic, color = Color3.fromRGB(245, 245, 245) },
+			{ name = "SpawnBox_NorthWall", position = Vector3.new(-70, 3, -8), size = Vector3.new(12, 6, 1), material = Enum.Material.SmoothPlastic, color = Color3.fromRGB(245, 245, 245) },
+			{ name = "SpawnBox_SouthWall", position = Vector3.new(-70, 3, 8), size = Vector3.new(12, 6, 1), material = Enum.Material.SmoothPlastic, color = Color3.fromRGB(245, 245, 245) },
+			{ name = "SpawnBox_Roof", position = Vector3.new(-70, 6.5, 0), size = Vector3.new(12, 1, 16), material = Enum.Material.SmoothPlastic, color = Color3.fromRGB(250, 250, 250) },
 		},
 		crawlBlockers = {
 			{ name = "CrawlOnlyBlockNorth", position = Vector3.new(-12, 2.5, -34), size = Vector3.new(6, 5, 8) },
@@ -117,7 +121,7 @@ local BUILTIN_DEFINITIONS = {
 			maxDistance = 12,
 		},
 		spawns = {
-			{ name = "ArenaSpawn", position = Vector3.new(0, 2, 0), size = Vector3.new(12, 1, 12), color = Color3.fromRGB(220, 220, 220), material = Enum.Material.SmoothPlastic, transparency = 0.7 },
+			{ name = "ArenaSpawn", position = Vector3.new(-70, 2, 0), size = Vector3.new(8, 1, 8), color = Color3.fromRGB(220, 220, 220), material = Enum.Material.SmoothPlastic, transparency = 0.7 },
 		},
 	},
 
