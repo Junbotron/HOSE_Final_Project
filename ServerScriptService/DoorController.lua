@@ -74,6 +74,7 @@ local function setupDoor(door)
 	openPrompt.KeyboardKeyCode     = Enum.KeyCode.E
 	openPrompt.HoldDuration        = 2
 	openPrompt.MaxActivationDistance = PROXIMITY_DIST
+	openPrompt.RequiresLineOfSight    = false
 	openPrompt:SetAttribute("UseLoadingGui", true)      -- hooks into MapInteractionClient loading bar
 	openPrompt:SetAttribute("LoaderText", "OPENING DOOR")
 	openPrompt.Parent = door
@@ -85,6 +86,7 @@ local function setupDoor(door)
 	slamPrompt.KeyboardKeyCode     = Enum.KeyCode.E
 	slamPrompt.HoldDuration        = 0
 	slamPrompt.MaxActivationDistance = PROXIMITY_DIST
+	slamPrompt.RequiresLineOfSight   = false
 	slamPrompt.Enabled             = false
 	slamPrompt.Parent              = door
 
