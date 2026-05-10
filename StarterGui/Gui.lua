@@ -12,11 +12,9 @@ local BAR_RIGHT_OFFSET = -24
 local BAR_TOP_OFFSET = 24
 local BAR_BOTTOM_OFFSET = -24
 local BAR_SPACING = 36
-local DEFAULT_TASK_SEGMENTS = 3
-local DEFAULT_MARKER_WIDTH_SCALE = 0.08
-local DEFAULT_SWING_SPEED = 0.9
 local TIMING_PANEL_HEIGHT = 112
 local TIMING_TRACK_HEIGHT = 18
+local SPAM_PANEL_HEIGHT = 118
 
 local function clamp(value, minValue, maxValue)
 	if value < minValue then return minValue end
@@ -25,7 +23,7 @@ local function clamp(value, minValue, maxValue)
 end
 
 local function getTaskTotalSegments()
-	return math.max(1, player:GetAttribute("TaskTotalSegments") or DEFAULT_TASK_SEGMENTS)
+	return math.max(1, player:GetAttribute("TaskTotalSegments") or 1)
 end
 
 local function getTaskProgressSegments()
@@ -33,11 +31,19 @@ local function getTaskProgressSegments()
 end
 
 local function getTaskMarkerWidthScale()
-	return clamp(player:GetAttribute("TaskMarkerWidthScale") or DEFAULT_MARKER_WIDTH_SCALE, 0.01, 1)
+	return clamp(player:GetAttribute("TaskMarkerWidthScale") or 0.01, 0.01, 1)
 end
 
 local function getTaskSwingSpeed()
-	return math.max(0, player:GetAttribute("TaskSwingSpeed") or DEFAULT_SWING_SPEED)
+	return math.max(0, player:GetAttribute("TaskSwingSpeed") or 0)
+end
+
+local function getSpamTaskTotalStages()
+	return math.max(1, player:GetAttribute("SpamTaskTotalStages") or 1)
+end
+
+local function getSpamTaskCompletedStages()
+	return math.floor(clamp(player:GetAttribute("SpamTaskCompletedStages") or 0, 0, getSpamTaskTotalStages()))
 end
 
 local function ensureInstance(parent, className, name)
@@ -123,6 +129,14 @@ local taskFill = ensureInstance(taskBar, "Frame", "Fill")
 local taskLabel = ensureInstance(taskBar, "TextLabel", "TextLabel")
 styleBar(taskBar, taskFill, taskLabel, UDim2.new(1, BAR_RIGHT_OFFSET, 0, BAR_TOP_OFFSET), Vector2.new(1, 0))
 
+local spamTaskGui = ensureInstance(playerGui, "ScreenGui", "SpamTaskGui")
+spamTaskGui.ResetOnSpawn = false
+
+local spamTaskBar = ensureInstance(spamTaskGui, "Frame", "SpamTaskBar")
+local spamTaskFill = ensureInstance(spamTaskBar, "Frame", "Fill")
+local spamTaskLabel = ensureInstance(spamTaskBar, "TextLabel", "TextLabel")
+styleBar(spamTaskBar, spamTaskFill, spamTaskLabel, UDim2.new(1, BAR_RIGHT_OFFSET, 0, BAR_TOP_OFFSET + BAR_SPACING), Vector2.new(1, 0))
+
 local taskTimingGui = ensureInstance(playerGui, "ScreenGui", "TaskTimingGui")
 taskTimingGui.ResetOnSpawn = false
 
@@ -189,8 +203,74 @@ local timingMarkerStroke = ensureInstance(timingMarker, "UIStroke", "Stroke")
 timingMarkerStroke.Color = Color3.fromRGB(30, 34, 40)
 timingMarkerStroke.Thickness = 2
 
+local spamTimingGui = ensureInstance(playerGui, "ScreenGui", "SpamTimingGui")
+spamTimingGui.ResetOnSpawn = false
+
+local spamPanel = ensureInstance(spamTimingGui, "Frame", "SpamPanel")
+spamPanel.AnchorPoint = Vector2.new(0.5, 1)
+spamPanel.Position = UDim2.new(0.5, 0, 1, -42)
+spamPanel.Size = UDim2.fromOffset(520, SPAM_PANEL_HEIGHT)
+spamPanel.BackgroundColor3 = Color3.fromRGB(19, 24, 30)
+spamPanel.BackgroundTransparency = 0.05
+spamPanel.BorderSizePixel = 0
+spamPanel.Visible = false
+
+local spamPanelCorner = ensureInstance(spamPanel, "UICorner", "Corner")
+spamPanelCorner.CornerRadius = UDim.new(0, 14)
+
+local spamPanelStroke = ensureInstance(spamPanel, "UIStroke", "Stroke")
+spamPanelStroke.Color = Color3.fromRGB(87, 184, 98)
+spamPanelStroke.Transparency = 0.15
+
+local spamTitle = ensureInstance(spamPanel, "TextLabel", "Title")
+spamTitle.BackgroundTransparency = 1
+spamTitle.Position = UDim2.fromOffset(18, 12)
+spamTitle.Size = UDim2.new(1, -36, 0, 28)
+spamTitle.Font = Enum.Font.GothamBold
+spamTitle.TextColor3 = Color3.fromRGB(239, 244, 246)
+spamTitle.TextSize = 18
+spamTitle.TextXAlignment = Enum.TextXAlignment.Left
+spamTitle.Text = "Spam Task"
+
+local spamHint = ensureInstance(spamPanel, "TextLabel", "Hint")
+spamHint.BackgroundTransparency = 1
+spamHint.Position = UDim2.fromOffset(18, 38)
+spamHint.Size = UDim2.new(1, -36, 0, 22)
+spamHint.Font = Enum.Font.Gotham
+spamHint.TextColor3 = Color3.fromRGB(180, 188, 194)
+spamHint.TextSize = 13
+spamHint.TextXAlignment = Enum.TextXAlignment.Left
+spamHint.Text = "Press T to start"
+
+local spamTrack = ensureInstance(spamPanel, "Frame", "Track")
+spamTrack.Position = UDim2.fromOffset(18, 74)
+spamTrack.Size = UDim2.new(1, -36, 0, TIMING_TRACK_HEIGHT)
+spamTrack.BackgroundColor3 = Color3.fromRGB(56, 61, 69)
+spamTrack.BorderSizePixel = 0
+
+local spamTrackCorner = ensureInstance(spamTrack, "UICorner", "Corner")
+spamTrackCorner.CornerRadius = UDim.new(1, 0)
+
+local spamGoalZone = ensureInstance(spamTrack, "Frame", "GoalZone")
+spamGoalZone.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+spamGoalZone.BorderSizePixel = 0
+
+local spamGoalCorner = ensureInstance(spamGoalZone, "UICorner", "Corner")
+spamGoalCorner.CornerRadius = UDim.new(1, 0)
+
+local spamFillTrack = ensureInstance(spamTrack, "Frame", "FillTrack")
+spamFillTrack.BackgroundColor3 = Color3.fromRGB(196, 201, 208)
+spamFillTrack.BorderSizePixel = 0
+
+local spamFillCorner = ensureInstance(spamFillTrack, "UICorner", "Corner")
+spamFillCorner.CornerRadius = UDim.new(1, 0)
+
 local function getTaskProgressRatio()
 	return getTaskProgressSegments() / getTaskTotalSegments()
+end
+
+local function getSpamTaskProgressRatio()
+	return getSpamTaskCompletedStages() / getSpamTaskTotalStages()
 end
 
 local function setFill(fill, ratio)
@@ -215,6 +295,25 @@ local function updateTaskProgressBar()
 	end
 
 	setFill(taskFill, taskRatio)
+end
+
+local function updateSpamTaskProgressBar()
+	local completedStages = getSpamTaskCompletedStages()
+	local totalStages = getSpamTaskTotalStages()
+	local lastResult = player:GetAttribute("SpamTaskLastResult")
+
+	if completedStages >= totalStages then
+		spamTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		spamTaskLabel.Text = "Spam Task Complete"
+	elseif lastResult == "Fail" then
+		spamTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
+		spamTaskLabel.Text = string.format("Spam Task %d/%d", completedStages, totalStages)
+	else
+		spamTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		spamTaskLabel.Text = string.format("Spam Task %d/%d", completedStages, totalStages)
+	end
+
+	setFill(spamTaskFill, getSpamTaskProgressRatio())
 end
 
 local function computeMarkerPosition(elapsedTime, markerWidthScale, swingSpeed)
@@ -247,6 +346,21 @@ local function updateTimingHint(isActive)
 	end
 end
 
+local function updateSpamHint(isActive)
+	local lastResult = player:GetAttribute("SpamTaskLastResult")
+	local currentStage = math.min(player:GetAttribute("SpamTaskCurrentStage") or 1, getSpamTaskTotalStages())
+
+	if isActive then
+		spamHint.Text = string.format("Stage %d/%d  Spam T rapidly", currentStage, getSpamTaskTotalStages())
+	elseif lastResult == "Success" then
+		spamHint.Text = "Spam task complete"
+	elseif lastResult == "StageClear" then
+		spamHint.Text = string.format("Stage cleared. Press T for stage %d", currentStage)
+	else
+		spamHint.Text = "Press T to start"
+	end
+end
+
 local function updateTimingMiniGame()
 	local isActive = player:GetAttribute("TaskMinigameActive") == true
 	timingPanel.Visible = isActive
@@ -257,7 +371,7 @@ local function updateTimingMiniGame()
 	end
 
 	local greenStart = clamp(player:GetAttribute("TaskGreenStart") or 0, 0, 1)
-	local greenWidth = clamp(player:GetAttribute("TaskGreenWidth") or 0.2, 0, 1)
+	local greenWidth = clamp(player:GetAttribute("TaskGreenWidth") or 0, 0, 1)
 	local markerWidthScale = getTaskMarkerWidthScale()
 	local swingSpeed = getTaskSwingSpeed()
 	local startedAt = player:GetAttribute("TaskAttemptStartedAt") or 0
@@ -268,6 +382,21 @@ local function updateTimingMiniGame()
 	timingGreenZone.Size = UDim2.fromScale(greenWidth, 1)
 	timingMarker.Position = UDim2.fromScale(markerPosition, 0)
 	timingMarker.Size = UDim2.fromScale(markerWidthScale, 1)
+end
+
+local function updateSpamMiniGame()
+	local isActive = player:GetAttribute("SpamTaskActive") == true
+	local goalStart = clamp(player:GetAttribute("SpamTaskGoalStart") or 1, 0, 1)
+	local goalWidth = clamp(player:GetAttribute("SpamTaskGoalWidth") or 0, 0, 1)
+	local currentFill = clamp(player:GetAttribute("SpamTaskCurrentFill") or 0, 0, 1)
+
+	spamPanel.Visible = isActive
+	updateSpamHint(isActive)
+	spamTitle.Text = string.format("Spam Task Stage %d/%d", math.min(player:GetAttribute("SpamTaskCurrentStage") or 1, getSpamTaskTotalStages()), getSpamTaskTotalStages())
+	spamGoalZone.Position = UDim2.fromScale(goalStart, 0)
+	spamGoalZone.Size = UDim2.fromScale(goalWidth, 1)
+	spamFillTrack.Position = UDim2.fromScale(0, 0)
+	spamFillTrack.Size = UDim2.fromScale(currentFill, 1)
 end
 
 local function updateRoleLabel()
@@ -380,7 +509,9 @@ end
 
 updateRoleLabel()
 updateTaskProgressBar()
+updateSpamTaskProgressBar()
 updateTimingMiniGame()
+updateSpamMiniGame()
 player:GetAttributeChangedSignal("CurrentRole"):Connect(updateRoleLabel)
 player:GetAttributeChangedSignal("TaskProgressSegments"):Connect(updateTaskProgressBar)
 player:GetAttributeChangedSignal("TaskTotalSegments"):Connect(updateTaskProgressBar)
@@ -389,14 +520,30 @@ player:GetAttributeChangedSignal("TaskMinigameActive"):Connect(updateTimingMiniG
 player:GetAttributeChangedSignal("TaskGreenStart"):Connect(updateTimingMiniGame)
 player:GetAttributeChangedSignal("TaskGreenWidth"):Connect(updateTimingMiniGame)
 player:GetAttributeChangedSignal("TaskAttemptStartedAt"):Connect(updateTimingMiniGame)
+player:GetAttributeChangedSignal("SpamTaskCompletedStages"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("SpamTaskTotalStages"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("SpamTaskLastResult"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("SpamTaskActive"):Connect(updateSpamMiniGame)
+player:GetAttributeChangedSignal("SpamTaskCurrentFill"):Connect(updateSpamMiniGame)
+player:GetAttributeChangedSignal("SpamTaskCurrentStage"):Connect(updateSpamMiniGame)
+player:GetAttributeChangedSignal("SpamTaskGoalStart"):Connect(updateSpamMiniGame)
+player:GetAttributeChangedSignal("SpamTaskGoalWidth"):Connect(updateSpamMiniGame)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	if gameProcessedEvent then
 		return
 	end
 
-	if input.KeyCode == Enum.KeyCode.R then
-		if player:GetAttribute("TaskMinigameActive") == true then
+	if input.KeyCode == Enum.KeyCode.T then
+		if player:GetAttribute("SpamTaskActive") == true then
+			taskEvent:FireServer("SpamTap")
+		elseif player:GetAttribute("TaskMinigameActive") ~= true then
+			taskEvent:FireServer("SpamStart")
+		end
+	elseif input.KeyCode == Enum.KeyCode.R then
+		if player:GetAttribute("SpamTaskActive") == true then
+			return
+		elseif player:GetAttribute("TaskMinigameActive") == true then
 			taskEvent:FireServer("Resolve")
 		else
 			taskEvent:FireServer("Start")
@@ -410,4 +557,5 @@ RunService.RenderStepped:Connect(function()
 	updateStaminaBar()
 	updateShoveBar(now)
 	updateTimingMiniGame()
+	updateSpamMiniGame()
 end)
