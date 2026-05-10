@@ -1,0 +1,8 @@
+Add vents
+Add doors
+
+Make task placeholder blocks (Computers, valves to turn...)
+Fix walls but honestly send it to ai to let it fix it. 
+
+Add multiple spawn locations in map (also make them invis and uninteractable)
+...so like under the floor or smt. or ai
