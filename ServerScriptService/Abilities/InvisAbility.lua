@@ -1,5 +1,10 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local gameplayConfigModule = script.Parent:FindFirstChild("GameplayConfig")
+	or script.Parent.Parent:WaitForChild("GameplayConfig")
+local GameplayConfig = require(gameplayConfigModule)
 
 local function getOrCreateRemoteEvent(name)
 	local remote = ReplicatedStorage:FindFirstChild(name)
@@ -15,11 +20,23 @@ end
 
 local requestEvent = getOrCreateRemoteEvent("InvisibilityRequestEvent")
 
-local INVISIBILITY_DURATION = 3
-local INVISIBILITY_COOLDOWN = 20
+local INVISIBILITY_DURATION = GameplayConfig.Invisibility.Duration
+local INVISIBILITY_COOLDOWN = GameplayConfig.Invisibility.Cooldown
 local activeTokens = {}
 local originalDisplayDistanceType = {}
 local originalHealthDisplayType = {}
+
+local function clamp(value, minimum, maximum)
+	if value < minimum then
+		return minimum
+	end
+
+	if value > maximum then
+		return maximum
+	end
+
+	return value
+end
 
 local function getHumanoid(player)
 	local character = player.Character
@@ -73,6 +90,7 @@ local function initializePlayer(player)
 	player:SetAttribute("IsInvisible", false)
 	player:SetAttribute("InvisibilityActiveEndsAt", 0)
 	player:SetAttribute("InvisibilityCooldownEndsAt", 0)
+	player:SetAttribute("InvisibilityBarRatio", 1)
 	player.CharacterAdded:Connect(function()
 		if player:GetAttribute("IsInvisible") then
 			hideIdentity(player)
@@ -83,6 +101,20 @@ local function initializePlayer(player)
 			clearInvisibility(player)
 		end
 	end)
+end
+
+local function updateBarRatio(player, now)
+	local activeEndsAt = player:GetAttribute("InvisibilityActiveEndsAt") or 0
+	local cooldownEndsAt = player:GetAttribute("InvisibilityCooldownEndsAt") or 0
+	local ratio = 1
+
+	if now < activeEndsAt then
+		ratio = clamp((activeEndsAt - now) / INVISIBILITY_DURATION, 0, 1)
+	elseif now < cooldownEndsAt then
+		ratio = 1 - clamp((cooldownEndsAt - now) / INVISIBILITY_COOLDOWN, 0, 1)
+	end
+
+	player:SetAttribute("InvisibilityBarRatio", ratio)
 end
 
 for _, player in ipairs(Players:GetPlayers()) do
@@ -117,4 +149,11 @@ requestEvent.OnServerEvent:Connect(function(player)
 	task.delay(INVISIBILITY_DURATION, function()
 		clearInvisibility(player, token)
 	end)
+end)
+
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	for _, player in ipairs(Players:GetPlayers()) do
+		updateBarRatio(player, now)
+	end
 end)

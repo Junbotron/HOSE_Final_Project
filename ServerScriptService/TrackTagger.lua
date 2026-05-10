@@ -15,6 +15,8 @@ This script manages:
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local GameplayConfig = require(script.Parent:WaitForChild("GameplayConfig"))
+
 local function getOrCreateRemoteEvent(name)
 	local remote = ReplicatedStorage:FindFirstChild(name)
 	if remote and remote:IsA("RemoteEvent") then
@@ -27,8 +29,8 @@ local function getOrCreateRemoteEvent(name)
 	return remote
 end
 
-local tagEvent = ReplicatedStorage:WaitForChild("TagEvent")
-local roleEvent = ReplicatedStorage:WaitForChild("RoleEvent")
+local tagEvent = getOrCreateRemoteEvent("TagEvent")
+local roleEvent = getOrCreateRemoteEvent("RoleEvent")
 local cooldownEvent = getOrCreateRemoteEvent("CooldownEvent")
 
 --==================================================
@@ -36,13 +38,13 @@ local cooldownEvent = getOrCreateRemoteEvent("CooldownEvent")
 --==================================================
 
 local itPlayer = nil                         -- Current tagger
-local MAX_TAG_DISTANCE = 5                   -- Max distance allowed for tagging
-local NO_TAG_BACK_TIME = 3                   -- Prevent immediate tagback
+local MAX_TAG_DISTANCE = GameplayConfig.Tag.MaxDistance                   -- Max distance allowed for tagging
+local NO_TAG_BACK_TIME = GameplayConfig.Tag.NoTagBackTime                -- Prevent immediate tagback
 
 local lastTagged = {}                        -- Tracks tagback protection
 
-local ROLE_TAGGER = "Tagger"
-local ROLE_SURVIVOR = "Survivor"
+local ROLE_TAGGER = GameplayConfig.Roles.Tagger
+local ROLE_SURVIVOR = GameplayConfig.Roles.Survivor
 
 local function getTagCooldownEndsAt(player)
 	return player:GetAttribute("TagCooldownEndsAt") or 0

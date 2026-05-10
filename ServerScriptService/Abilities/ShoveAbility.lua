@@ -1,5 +1,10 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+local gameplayConfigModule = script.Parent:FindFirstChild("GameplayConfig")
+	or script.Parent.Parent:WaitForChild("GameplayConfig")
+local GameplayConfig = require(gameplayConfigModule)
 
 local function getOrCreateRemoteEvent(name)
 	local remote = ReplicatedStorage:FindFirstChild(name)
@@ -15,20 +20,43 @@ end
 
 local shoveEvent = getOrCreateRemoteEvent("ShoveEvent")
 
-local MAX_SHOVE_DISTANCE = 6
-local SHOVE_COOLDOWN = 2
-local RAGDOLL_DURATION = 2
-local SHOVE_DISTANCE = 10
-local SHOVE_TRAVEL_TIME = 0.2
+local MAX_SHOVE_DISTANCE = GameplayConfig.Shove.MaxDistance
+local SHOVE_COOLDOWN = GameplayConfig.Shove.Cooldown
+local RAGDOLL_DURATION = GameplayConfig.Shove.RagdollDuration
+local SHOVE_DISTANCE = GameplayConfig.Shove.Distance
+local SHOVE_TRAVEL_TIME = GameplayConfig.Shove.TravelTime
 
-local ROLE_TAGGER = "Tagger"
-local ROLE_SURVIVOR = "Survivor"
+local ROLE_TAGGER = GameplayConfig.Roles.Tagger
+local ROLE_SURVIVOR = GameplayConfig.Roles.Survivor
 
-local lastShoveTime = {}
 local ragdollTokens = {}
+
+local function clamp(value, minimum, maximum)
+	if value < minimum then
+		return minimum
+	end
+
+	if value > maximum then
+		return maximum
+	end
+
+	return value
+end
 
 local function initializePlayer(player)
 	player:SetAttribute("ShoveCooldownEndsAt", 0)
+	player:SetAttribute("ShoveBarRatio", 1)
+end
+
+local function updateBarRatio(player, now)
+	local cooldownEndsAt = player:GetAttribute("ShoveCooldownEndsAt") or 0
+	local ratio = 1
+
+	if now < cooldownEndsAt then
+		ratio = 1 - clamp((cooldownEndsAt - now) / SHOVE_COOLDOWN, 0, 1)
+	end
+
+	player:SetAttribute("ShoveBarRatio", ratio)
 end
 
 local function getCharacterRoot(character)
@@ -88,7 +116,6 @@ shoveEvent.OnServerEvent:Connect(function(player, targetPlayer)
 
 	local now = tick()
 	if now < (player:GetAttribute("ShoveCooldownEndsAt") or 0) then return end
-	lastShoveTime[player] = now
 	player:SetAttribute("ShoveCooldownEndsAt", now + SHOVE_COOLDOWN)
 
 	local pushDirection = horizontalOffset.Magnitude > 0 and horizontalOffset.Unit or pRoot.CFrame.LookVector
@@ -102,6 +129,12 @@ end
 Players.PlayerAdded:Connect(initializePlayer)
 
 Players.PlayerRemoving:Connect(function(player)
-	lastShoveTime[player] = nil
 	ragdollTokens[player] = nil
+end)
+
+RunService.Heartbeat:Connect(function()
+	local now = tick()
+	for _, player in ipairs(Players:GetPlayers()) do
+		updateBarRatio(player, now)
+	end
 end)
