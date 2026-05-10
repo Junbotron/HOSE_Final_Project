@@ -95,7 +95,7 @@ ProximityPromptService.PromptButtonHoldBegan:Connect(function(prompt)
 	end
 
 	activePrompt = prompt
-	holdStartedAt = tick()
+	holdStartedAt = os.clock()
 	createLoadingGui()
 	titleLabel.Text = string.upper(prompt:GetAttribute("LoaderText") or prompt.ActionText or "INTERACTING")
 	setLoaderVisible(true)
@@ -130,7 +130,7 @@ RunService.RenderStepped:Connect(function()
 		return
 	end
 
-	local alpha = math.clamp((tick() - holdStartedAt) / duration, 0, 1)
+	local alpha = math.clamp((os.clock() - holdStartedAt) / duration, 0, 1)
 	fillBar.Size = UDim2.fromScale(alpha, 1)
 	if alpha >= 1 then
 		activePrompt = nil
