@@ -12,10 +12,14 @@ local NORMAL_RECOVERY_DURATION = 5
 local EXHAUSTED_RECOVERY_DURATION = 10
 local SPRINT_SPEED_MULTIPLIER = 1.5
 local CROUCH_SPEED_MULTIPLIER = 0.55
+local JUMP_REDUCTION_MULTIPLIER = 0.9
 local SLIDE_SPEED_MULTIPLIER = 2.1
-local SLIDE_DURATION = 1
+local SLIDE_BURST_SPEED_MULTIPLIER = math.max(SLIDE_SPEED_MULTIPLIER + 0.5, SPRINT_SPEED_MULTIPLIER + 0.25)
+local SLIDE_DURATION = 1.5
+local SLIDE_BURST_DURATION = 0.18
+local SLIDE_SPRINT_ENERGY_PENALTY = 0.5
 local CROUCH_ANIMATION_ID = "rbxassetid://78278415495111"
-local SLIDE_ANIMATION_ID = "rbxassetid://76836978835900"
+local SLIDE_ANIMATION_ID = "rbxassetid://128196899539056"
 local crouchStateEvent = ReplicatedStorage:WaitForChild("CrouchStateEvent")
 
 local sprintHeld = false
@@ -150,6 +154,21 @@ local function updateWalkSpeed(humanoid, isSprinting)
 	end
 end
 
+local function applyJumpReduction(humanoid)
+	if humanoid.UseJumpPower then
+		humanoid.JumpPower = humanoid.JumpPower * JUMP_REDUCTION_MULTIPLIER
+	else
+		humanoid.JumpHeight = humanoid.JumpHeight * JUMP_REDUCTION_MULTIPLIER
+	end
+end
+
+local function applySlideSprintCooldown()
+	sprintEnergy = math.max(0, sprintEnergy - SLIDE_SPRINT_ENERGY_PENALTY)
+	if sprintEnergy <= 0 then
+		sprintBurnedOut = true
+	end
+end
+
 local function finishSlide()
 	local keepCrouching = crouchHeld
 	if not isSliding then
@@ -158,10 +177,7 @@ local function finishSlide()
 
 	isSliding = false
 	isCrouching = keepCrouching
-	if sprintHeld and not keepCrouching then
-		sprintEnergy = 0.5
-		sprintBurnedOut = false
-	end
+	applySlideSprintCooldown()
 	stopSlideAnimation()
 	syncCrouchStateToServer()
 end
@@ -232,8 +248,19 @@ local function updateSlideVelocity()
 		return
 	end
 
-	local progress = clamp(timeRemaining / SLIDE_DURATION, 0, 1)
-	local horizontalSpeed = baseWalkSpeed * (CROUCH_SPEED_MULTIPLIER + ((SLIDE_SPEED_MULTIPLIER - CROUCH_SPEED_MULTIPLIER) * progress))
+	local elapsedTime = SLIDE_DURATION - timeRemaining
+	local speedMultiplier = SLIDE_SPEED_MULTIPLIER
+
+	if elapsedTime < SLIDE_BURST_DURATION then
+		local burstProgress = clamp(elapsedTime / SLIDE_BURST_DURATION, 0, 1)
+		speedMultiplier = SLIDE_BURST_SPEED_MULTIPLIER + ((SLIDE_SPEED_MULTIPLIER - SLIDE_BURST_SPEED_MULTIPLIER) * burstProgress)
+	else
+		local slowdownDuration = math.max(SLIDE_DURATION - SLIDE_BURST_DURATION, 0.001)
+		local slowdownProgress = clamp((elapsedTime - SLIDE_BURST_DURATION) / slowdownDuration, 0, 1)
+		speedMultiplier = SLIDE_SPEED_MULTIPLIER + ((CROUCH_SPEED_MULTIPLIER - SLIDE_SPEED_MULTIPLIER) * slowdownProgress)
+	end
+
+	local horizontalSpeed = baseWalkSpeed * speedMultiplier
 	rootPart.AssemblyLinearVelocity = Vector3.new(
 		slideDirection.X * horizontalSpeed,
 		rootPart.AssemblyLinearVelocity.Y,
