@@ -17,12 +17,14 @@ Minigame distribution (each used 3 times across 12 tasks):
   Minigame 4 → tasks 4, 8, 12
 ====================================================]]
 
-local Players          = game:GetService("Players")
-local RunService       = game:GetService("RunService")
-local Workspace        = game:GetService("Workspace")
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService        = game:GetService("RunService")
+local Workspace         = game:GetService("Workspace")
 
 local player    = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
+local taskEvent = ReplicatedStorage:WaitForChild("TaskMinigameEvent")
 
 local PROXIMITY_DIST = 10
 
@@ -137,16 +139,30 @@ local function openTaskPanel(prompt)
 	activePrompt = prompt
 	prompt.Enabled = false
 	player:SetAttribute("ActiveTaskId", taskNum)
+	player:SetAttribute("ActiveMinigameId", config.minigame)
 
 	taskNameLabel.Text = config.label
-	minigameLabel.Text = string.format("[ Minigame %d  —  Placeholder ]", config.minigame)
+	-- minigame 1 (timing) and 2 (spam) use their own panels; hide placeholder for those
+	local isPlaceholder = config.minigame >= 3
+	placeholderBar.Visible = isPlaceholder
+	if isPlaceholder then
+		minigameLabel.Text = string.format("[ Minigame %d  —  Placeholder ]", config.minigame)
+	end
 	panel.Visible = true
 end
 
 local function closeTaskPanel()
 	if not panel.Visible then return end
 	panel.Visible = false
+	-- cancel any in-progress minigame so panels clear
+	if player:GetAttribute("TaskMinigameActive") == true then
+		taskEvent:FireServer("Resolve")
+	end
+	if player:GetAttribute("SpamTaskActive") == true then
+		taskEvent:FireServer("SpamCancel")
+	end
 	player:SetAttribute("ActiveTaskId", nil)
+	player:SetAttribute("ActiveMinigameId", nil)
 	activePart = nil
 	if activePrompt then
 		activePrompt.Enabled = true

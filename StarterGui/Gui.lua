@@ -401,7 +401,7 @@ end
 
 local function updateRoleLabel()
 	local role = player:GetAttribute("CurrentRole")
-	if role == "Tagger" then
+	if role == "Tagger" then 
 		roleLabel.Text = "YOU'RE IT!!!"
 		roleLabel.TextColor3 = Color3.fromRGB(255, 70, 70)
 	elseif role == "Survivor" then
@@ -535,15 +535,15 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	end
 
 	if input.KeyCode == Enum.KeyCode.T then
+		if player:GetAttribute("ActiveMinigameId") ~= 2 then return end
 		if player:GetAttribute("SpamTaskActive") == true then
 			taskEvent:FireServer("SpamTap")
-		elseif player:GetAttribute("TaskMinigameActive") ~= true then
+		else
 			taskEvent:FireServer("SpamStart")
 		end
 	elseif input.KeyCode == Enum.KeyCode.R then
-		if player:GetAttribute("SpamTaskActive") == true then
-			return
-		elseif player:GetAttribute("TaskMinigameActive") == true then
+		if player:GetAttribute("ActiveMinigameId") ~= 1 then return end
+		if player:GetAttribute("TaskMinigameActive") == true then
 			taskEvent:FireServer("Resolve")
 		else
 			taskEvent:FireServer("Start")
