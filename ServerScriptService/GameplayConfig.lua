@@ -41,6 +41,14 @@ local GameplayConfig = {
 		MarkerWidthScale = 0.08,
 		SidePaddingScale = 0.08,
 		SwingSpeed = 0.9,
+		Spam = {
+			TotalStages = 3,
+			GoalStartScale = 0.88,
+			GoalWidthScale = 0.12,
+			FillPerTap = 0.08,
+			BaseDecayPerSecond = 0.12,
+			StageDecayIncrease = 0.12,
+		},
 	},
 }
 
