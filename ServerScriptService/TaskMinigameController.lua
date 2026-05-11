@@ -1,4 +1,5 @@
 local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
@@ -8,6 +9,8 @@ local GameplayConfig = require(script.Parent:WaitForChild("GameplayConfig"))
 local TASK_EVENT_NAME = "TaskMinigameEvent"
 local taskConfig = GameplayConfig.TaskMinigame
 local spamConfig = taskConfig.Spam
+local puzzleConfig = taskConfig.Puzzle
+local codeConfig = taskConfig.Code
 local randomGenerator = Random.new()
 local playerStates = {}
 
@@ -53,6 +56,8 @@ local function getPlayerState(player)
 		greenWidth = taskConfig.GreenWidthMax,
 		spamFill = 0,
 		spamLastUpdatedAt = 0,
+		codeDefinition = nil,
+		codeRevealCount = 0,
 	}
 
 	playerStates[player] = state
@@ -65,6 +70,14 @@ end
 
 local function getSpamCompletedStages(player)
 	return clamp(player:GetAttribute("SpamTaskCompletedStages") or 0, 0, spamConfig.TotalStages)
+end
+
+local function getPuzzleCompletedStages(player)
+	return clamp(player:GetAttribute("PuzzleTaskCompletedStages") or 0, 0, puzzleConfig.TotalStages)
+end
+
+local function getCodeCompletedStages(player)
+	return clamp(player:GetAttribute("CodeTaskCompletedStages") or 0, 0, codeConfig.TotalStages)
 end
 
 local function getSpamStageDecay(completedStages)
@@ -93,6 +106,204 @@ local function computeMarkerPosition(elapsedTime)
 	return traveled
 end
 
+local function getPuzzleStage(stageIndex)
+	return puzzleConfig.Stages[stageIndex]
+end
+
+local function getCodeStage(stageIndex)
+	return codeConfig.Stages[stageIndex]
+end
+
+local function encodePuzzleDefinition(stageIndex)
+	local stage = getPuzzleStage(stageIndex)
+	if not stage then
+		return ""
+	end
+
+	return HttpService:JSONEncode({
+		stage = stageIndex,
+		size = stage.Size,
+		pairs = stage.Pairs,
+	})
+end
+
+local function encodeCodeDefinition(definition)
+	if not definition then
+		return ""
+	end
+
+	local lines = {}
+	for _, line in ipairs(definition.lines) do
+		table.insert(lines, {
+			html = line.html,
+			letters = line.letters,
+		})
+	end
+
+	return HttpService:JSONEncode({
+		stage = definition.stage,
+		lines = lines,
+		totalInputs = definition.totalInputs,
+	})
+end
+
+local function buildCodeDefinition(stageIndex)
+	local stage = getCodeStage(stageIndex)
+	if not stage then
+		return nil
+	end
+
+	local definition = {
+		stage = stageIndex,
+		lines = {},
+		sequence = {},
+		totalInputs = 0,
+	}
+
+	for _, lineConfig in ipairs(stage.Lines) do
+		local letters = {}
+		for _ = 1, lineConfig.SequenceLength do
+			local letterIndex = randomGenerator:NextInteger(1, #codeConfig.Letters)
+			local letter = codeConfig.Letters[letterIndex]
+			table.insert(letters, letter)
+			table.insert(definition.sequence, letter)
+		end
+
+		table.insert(definition.lines, {
+			html = lineConfig.Html,
+			letters = letters,
+		})
+	end
+
+	definition.totalInputs = #definition.sequence
+	return definition
+end
+
+local function cellKey(row, column)
+	return string.format("%d:%d", row, column)
+end
+
+local function normalizeCell(cellData)
+	if type(cellData) ~= "table" then
+		return nil
+	end
+
+	local row = tonumber(cellData.row or cellData[1])
+	local column = tonumber(cellData.column or cellData.col or cellData[2])
+	if not row or not column then
+		return nil
+	end
+
+	return {
+		row = math.floor(row),
+		column = math.floor(column),
+	}
+end
+
+local function matchesEndpoint(cell, endpoint)
+	return cell.row == endpoint[1] and cell.column == endpoint[2]
+end
+
+local function buildPuzzlePairMaps(stage)
+	local pairMap = {}
+	local endpointOwners = {}
+
+	for _, pair in ipairs(stage.Pairs) do
+		pairMap[pair.Id] = pair
+		endpointOwners[cellKey(pair.Endpoints[1][1], pair.Endpoints[1][2])] = pair.Id
+		endpointOwners[cellKey(pair.Endpoints[2][1], pair.Endpoints[2][2])] = pair.Id
+	end
+
+	return pairMap, endpointOwners
+end
+
+local function validatePuzzleSubmission(stage, submission)
+	if type(submission) ~= "table" or type(submission.paths) ~= "table" then
+		return false
+	end
+
+	local pairMap, endpointOwners = buildPuzzlePairMaps(stage)
+	local occupiedCells = {}
+	local seenPairs = {}
+	local validatedCount = 0
+
+	for _, pathData in ipairs(submission.paths) do
+		if type(pathData) ~= "table" then
+			return false
+		end
+
+		local pairId = tonumber(pathData.id)
+		if not pairId then
+			return false
+		end
+
+		local pair = pairMap[pairId]
+		local cells = pathData.cells
+		if not pair or seenPairs[pairId] or type(cells) ~= "table" or #cells < 2 then
+			return false
+		end
+
+		local firstCell = normalizeCell(cells[1])
+		local lastCell = normalizeCell(cells[#cells])
+		if not firstCell or not lastCell then
+			return false
+		end
+
+		local endpoints = pair.Endpoints
+		local connectsBothEnds = (
+			(matchesEndpoint(firstCell, endpoints[1]) and matchesEndpoint(lastCell, endpoints[2]))
+			or (matchesEndpoint(firstCell, endpoints[2]) and matchesEndpoint(lastCell, endpoints[1]))
+		)
+		if not connectsBothEnds then
+			return false
+		end
+
+		local localSeen = {}
+		local previousCell = nil
+
+		for index, rawCell in ipairs(cells) do
+			local cell = normalizeCell(rawCell)
+			if not cell then
+				return false
+			end
+
+			if cell.row < 1 or cell.row > stage.Size or cell.column < 1 or cell.column > stage.Size then
+				return false
+			end
+
+			local key = cellKey(cell.row, cell.column)
+			if localSeen[key] or occupiedCells[key] then
+				return false
+			end
+
+			local endpointOwner = endpointOwners[key]
+			if endpointOwner and endpointOwner ~= pairId then
+				return false
+			end
+
+			if previousCell then
+				local manhattanDistance = math.abs(cell.row - previousCell.row) + math.abs(cell.column - previousCell.column)
+				if manhattanDistance ~= 1 then
+					return false
+				end
+			end
+
+			if index > 1 and index < #cells and endpointOwner == pairId then
+				return false
+			end
+
+			localSeen[key] = true
+			occupiedCells[key] = pairId
+			previousCell = cell
+		end
+
+		seenPairs[pairId] = true
+		validatedCount = validatedCount + 1
+	end
+
+	return validatedCount == #stage.Pairs
+end
+
 local function syncStaticAttributes(player, progressSegments)
 	player:SetAttribute("TaskTotalSegments", taskConfig.TotalSegments)
 	player:SetAttribute("TaskProgressSegments", progressSegments)
@@ -112,6 +323,21 @@ local function syncStaticAttributes(player, progressSegments)
 	player:SetAttribute("SpamTaskCurrentStage", math.min(getSpamCompletedStages(player) + 1, spamConfig.TotalStages))
 	player:SetAttribute("SpamTaskDecayPerSecond", getSpamStageDecay(getSpamCompletedStages(player)))
 	player:SetAttribute("SpamTaskLastResult", "Idle")
+	player:SetAttribute("PuzzleTaskTotalStages", puzzleConfig.TotalStages)
+	player:SetAttribute("PuzzleTaskCompletedStages", getPuzzleCompletedStages(player))
+	player:SetAttribute("PuzzleTaskCurrentStage", math.min(getPuzzleCompletedStages(player) + 1, puzzleConfig.TotalStages))
+	player:SetAttribute("PuzzleTaskGridSize", 0)
+	player:SetAttribute("PuzzleTaskActive", false)
+	player:SetAttribute("PuzzleTaskDefinitionJson", "")
+	player:SetAttribute("PuzzleTaskLastResult", "Idle")
+	player:SetAttribute("CodeTaskTotalStages", codeConfig.TotalStages)
+	player:SetAttribute("CodeTaskCompletedStages", getCodeCompletedStages(player))
+	player:SetAttribute("CodeTaskCurrentStage", math.min(getCodeCompletedStages(player) + 1, codeConfig.TotalStages))
+	player:SetAttribute("CodeTaskActive", false)
+	player:SetAttribute("CodeTaskDefinitionJson", "")
+	player:SetAttribute("CodeTaskRevealCount", 0)
+	player:SetAttribute("CodeTaskTotalInputs", 0)
+	player:SetAttribute("CodeTaskLastResult", "Idle")
 end
 
 local function initializePlayer(player)
@@ -126,6 +352,14 @@ local function startRound(player)
 	end
 
 	if player:GetAttribute("SpamTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("PuzzleTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("CodeTaskActive") == true then
 		return
 	end
 
@@ -189,6 +423,14 @@ local function startSpamRound(player)
 	end
 
 	if player:GetAttribute("TaskMinigameActive") == true then
+		return
+	end
+
+	if player:GetAttribute("PuzzleTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("CodeTaskActive") == true then
 		return
 	end
 
@@ -267,7 +509,191 @@ local function tapSpamRound(player)
 	updateSpamStageAttributes(player, completedStages, state.spamFill)
 end
 
-taskEvent.OnServerEvent:Connect(function(player, action)
+local function startPuzzleStage(player, stageIndex)
+	local stage = getPuzzleStage(stageIndex)
+	if not stage then
+		return false
+	end
+
+	player:SetAttribute("PuzzleTaskCurrentStage", stageIndex)
+	player:SetAttribute("PuzzleTaskGridSize", stage.Size)
+	player:SetAttribute("PuzzleTaskDefinitionJson", encodePuzzleDefinition(stageIndex))
+	player:SetAttribute("PuzzleTaskActive", true)
+	player:SetAttribute("PuzzleTaskLastResult", "Running")
+	return true
+end
+
+local function startPuzzleRound(player)
+	if player:GetAttribute("PuzzleTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("TaskMinigameActive") == true or player:GetAttribute("SpamTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("CodeTaskActive") == true then
+		return
+	end
+
+	local completedStages = getPuzzleCompletedStages(player)
+	if completedStages >= puzzleConfig.TotalStages then
+		return
+	end
+
+	startPuzzleStage(player, completedStages + 1)
+end
+
+local function cancelPuzzleRound(player)
+	if player:GetAttribute("PuzzleTaskActive") ~= true then
+		return
+	end
+
+	player:SetAttribute("PuzzleTaskActive", false)
+	player:SetAttribute("PuzzleTaskGridSize", 0)
+	player:SetAttribute("PuzzleTaskDefinitionJson", "")
+	player:SetAttribute("PuzzleTaskLastResult", "Idle")
+	player:SetAttribute("PuzzleTaskCurrentStage", math.min(getPuzzleCompletedStages(player) + 1, puzzleConfig.TotalStages))
+end
+
+local function submitPuzzleRound(player, submissionJson)
+	if player:GetAttribute("PuzzleTaskActive") ~= true or type(submissionJson) ~= "string" then
+		return
+	end
+
+	local currentStage = math.min(getPuzzleCompletedStages(player) + 1, puzzleConfig.TotalStages)
+	local stage = getPuzzleStage(currentStage)
+	if not stage then
+		return
+	end
+
+	local decodedSubmission = nil
+	local success, decodedOrError = pcall(HttpService.JSONDecode, HttpService, submissionJson)
+	if success then
+		decodedSubmission = decodedOrError
+	else
+		player:SetAttribute("PuzzleTaskLastResult", "Fail")
+		return
+	end
+
+	if not validatePuzzleSubmission(stage, decodedSubmission) then
+		player:SetAttribute("PuzzleTaskLastResult", "Fail")
+		return
+	end
+
+	local completedStages = math.min(puzzleConfig.TotalStages, getPuzzleCompletedStages(player) + 1)
+	player:SetAttribute("PuzzleTaskCompletedStages", completedStages)
+
+	if completedStages >= puzzleConfig.TotalStages then
+		player:SetAttribute("PuzzleTaskActive", false)
+		player:SetAttribute("PuzzleTaskGridSize", 0)
+		player:SetAttribute("PuzzleTaskDefinitionJson", "")
+		player:SetAttribute("PuzzleTaskCurrentStage", puzzleConfig.TotalStages)
+		player:SetAttribute("PuzzleTaskLastResult", "Success")
+	else
+		startPuzzleStage(player, completedStages + 1)
+	end
+end
+
+local function startCodeStage(player, stageIndex, lastResult)
+	local state = getPlayerState(player)
+	local definition = buildCodeDefinition(stageIndex)
+	if not definition then
+		return false
+	end
+
+	state.codeDefinition = definition
+	state.codeRevealCount = 0
+
+	player:SetAttribute("CodeTaskCurrentStage", stageIndex)
+	player:SetAttribute("CodeTaskDefinitionJson", encodeCodeDefinition(definition))
+	player:SetAttribute("CodeTaskRevealCount", 0)
+	player:SetAttribute("CodeTaskTotalInputs", definition.totalInputs)
+	player:SetAttribute("CodeTaskActive", true)
+	player:SetAttribute("CodeTaskLastResult", lastResult or "Running")
+	return true
+end
+
+local function startCodeRound(player)
+	if player:GetAttribute("CodeTaskActive") == true then
+		return
+	end
+
+	if player:GetAttribute("TaskMinigameActive") == true or player:GetAttribute("SpamTaskActive") == true or player:GetAttribute("PuzzleTaskActive") == true then
+		return
+	end
+
+	local completedStages = getCodeCompletedStages(player)
+	if completedStages >= codeConfig.TotalStages then
+		return
+	end
+
+	startCodeStage(player, completedStages + 1)
+end
+
+local function cancelCodeRound(player)
+	if player:GetAttribute("CodeTaskActive") ~= true then
+		return
+	end
+
+	local state = getPlayerState(player)
+	state.codeDefinition = nil
+	state.codeRevealCount = 0
+
+	player:SetAttribute("CodeTaskActive", false)
+	player:SetAttribute("CodeTaskDefinitionJson", "")
+	player:SetAttribute("CodeTaskRevealCount", 0)
+	player:SetAttribute("CodeTaskTotalInputs", 0)
+	player:SetAttribute("CodeTaskLastResult", "Idle")
+	player:SetAttribute("CodeTaskCurrentStage", math.min(getCodeCompletedStages(player) + 1, codeConfig.TotalStages))
+end
+
+local function inputCodeRound(player, inputLetter)
+	if player:GetAttribute("CodeTaskActive") ~= true or type(inputLetter) ~= "string" then
+		return
+	end
+
+	local state = getPlayerState(player)
+	local definition = state.codeDefinition
+	if not definition then
+		startCodeStage(player, math.min(getCodeCompletedStages(player) + 1, codeConfig.TotalStages), "Running")
+		return
+	end
+
+	local normalizedInput = string.upper(inputLetter)
+	local expectedLetter = definition.sequence[state.codeRevealCount + 1]
+	if normalizedInput ~= expectedLetter then
+		startCodeStage(player, definition.stage, "Fail")
+		return
+	end
+
+	state.codeRevealCount = state.codeRevealCount + 1
+	player:SetAttribute("CodeTaskRevealCount", state.codeRevealCount)
+	player:SetAttribute("CodeTaskLastResult", "Running")
+
+	if state.codeRevealCount < definition.totalInputs then
+		return
+	end
+
+	local completedStages = math.min(codeConfig.TotalStages, getCodeCompletedStages(player) + 1)
+	player:SetAttribute("CodeTaskCompletedStages", completedStages)
+
+	if completedStages >= codeConfig.TotalStages then
+		state.codeDefinition = nil
+		state.codeRevealCount = 0
+		player:SetAttribute("CodeTaskActive", false)
+		player:SetAttribute("CodeTaskDefinitionJson", "")
+		player:SetAttribute("CodeTaskRevealCount", 0)
+		player:SetAttribute("CodeTaskTotalInputs", 0)
+		player:SetAttribute("CodeTaskCurrentStage", codeConfig.TotalStages)
+		player:SetAttribute("CodeTaskLastResult", "Success")
+	else
+		startCodeStage(player, completedStages + 1, "StageClear")
+		player:SetAttribute("CodeTaskCompletedStages", completedStages)
+	end
+end
+
+taskEvent.OnServerEvent:Connect(function(player, action, payload)
 	if type(action) ~= "string" then
 		return
 	end
@@ -282,6 +708,18 @@ taskEvent.OnServerEvent:Connect(function(player, action)
 		tapSpamRound(player)
 	elseif action == "SpamCancel" then
 		cancelSpamRound(player)
+	elseif action == "PuzzleStart" then
+		startPuzzleRound(player)
+	elseif action == "PuzzleSubmit" then
+		submitPuzzleRound(player, payload)
+	elseif action == "PuzzleCancel" then
+		cancelPuzzleRound(player)
+	elseif action == "CodeStart" then
+		startCodeRound(player)
+	elseif action == "CodeInput" then
+		inputCodeRound(player, payload)
+	elseif action == "CodeCancel" then
+		cancelCodeRound(player)
 	end
 end)
 

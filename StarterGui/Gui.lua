@@ -46,6 +46,22 @@ local function getSpamTaskCompletedStages()
 	return math.floor(clamp(player:GetAttribute("SpamTaskCompletedStages") or 0, 0, getSpamTaskTotalStages()))
 end
 
+local function getPuzzleTaskTotalStages()
+	return math.max(1, player:GetAttribute("PuzzleTaskTotalStages") or 1)
+end
+
+local function getPuzzleTaskCompletedStages()
+	return math.floor(clamp(player:GetAttribute("PuzzleTaskCompletedStages") or 0, 0, getPuzzleTaskTotalStages()))
+end
+
+local function getCodeTaskTotalStages()
+	return math.max(1, player:GetAttribute("CodeTaskTotalStages") or 1)
+end
+
+local function getCodeTaskCompletedStages()
+	return math.floor(clamp(player:GetAttribute("CodeTaskCompletedStages") or 0, 0, getCodeTaskTotalStages()))
+end
+
 local function ensureInstance(parent, className, name)
 	local instance = parent:FindFirstChild(name)
 	if instance then
@@ -136,6 +152,22 @@ local spamTaskBar = ensureInstance(spamTaskGui, "Frame", "SpamTaskBar")
 local spamTaskFill = ensureInstance(spamTaskBar, "Frame", "Fill")
 local spamTaskLabel = ensureInstance(spamTaskBar, "TextLabel", "TextLabel")
 styleBar(spamTaskBar, spamTaskFill, spamTaskLabel, UDim2.new(1, BAR_RIGHT_OFFSET, 0, BAR_TOP_OFFSET + BAR_SPACING), Vector2.new(1, 0))
+
+local puzzleTaskGui = ensureInstance(playerGui, "ScreenGui", "PuzzleTaskGui")
+puzzleTaskGui.ResetOnSpawn = false
+
+local puzzleTaskBar = ensureInstance(puzzleTaskGui, "Frame", "PuzzleTaskBar")
+local puzzleTaskFill = ensureInstance(puzzleTaskBar, "Frame", "Fill")
+local puzzleTaskLabel = ensureInstance(puzzleTaskBar, "TextLabel", "TextLabel")
+styleBar(puzzleTaskBar, puzzleTaskFill, puzzleTaskLabel, UDim2.new(1, BAR_RIGHT_OFFSET, 0, BAR_TOP_OFFSET + (BAR_SPACING * 2)), Vector2.new(1, 0))
+
+local codeTaskGui = ensureInstance(playerGui, "ScreenGui", "CodeTaskGui")
+codeTaskGui.ResetOnSpawn = false
+
+local codeTaskBar = ensureInstance(codeTaskGui, "Frame", "CodeTaskBar")
+local codeTaskFill = ensureInstance(codeTaskBar, "Frame", "Fill")
+local codeTaskLabel = ensureInstance(codeTaskBar, "TextLabel", "TextLabel")
+styleBar(codeTaskBar, codeTaskFill, codeTaskLabel, UDim2.new(1, BAR_RIGHT_OFFSET, 0, BAR_TOP_OFFSET + (BAR_SPACING * 3)), Vector2.new(1, 0))
 
 local taskTimingGui = ensureInstance(playerGui, "ScreenGui", "TaskTimingGui")
 taskTimingGui.ResetOnSpawn = false
@@ -273,6 +305,14 @@ local function getSpamTaskProgressRatio()
 	return getSpamTaskCompletedStages() / getSpamTaskTotalStages()
 end
 
+local function getPuzzleTaskProgressRatio()
+	return getPuzzleTaskCompletedStages() / getPuzzleTaskTotalStages()
+end
+
+local function getCodeTaskProgressRatio()
+	return getCodeTaskCompletedStages() / getCodeTaskTotalStages()
+end
+
 local function setFill(fill, ratio)
 	fill.Size = UDim2.fromScale(clamp(ratio, 0, 1), 1)
 end
@@ -314,6 +354,44 @@ local function updateSpamTaskProgressBar()
 	end
 
 	setFill(spamTaskFill, getSpamTaskProgressRatio())
+end
+
+local function updatePuzzleTaskProgressBar()
+	local completedStages = getPuzzleTaskCompletedStages()
+	local totalStages = getPuzzleTaskTotalStages()
+	local lastResult = player:GetAttribute("PuzzleTaskLastResult")
+
+	if completedStages >= totalStages then
+		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		puzzleTaskLabel.Text = "Grid Task Complete"
+	elseif lastResult == "Fail" then
+		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
+		puzzleTaskLabel.Text = string.format("Grid Task %d/%d", completedStages, totalStages)
+	else
+		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		puzzleTaskLabel.Text = string.format("Grid Task %d/%d", completedStages, totalStages)
+	end
+
+	setFill(puzzleTaskFill, getPuzzleTaskProgressRatio())
+end
+
+local function updateCodeTaskProgressBar()
+	local completedStages = getCodeTaskCompletedStages()
+	local totalStages = getCodeTaskTotalStages()
+	local lastResult = player:GetAttribute("CodeTaskLastResult")
+
+	if completedStages >= totalStages then
+		codeTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		codeTaskLabel.Text = "Override Task Complete"
+	elseif lastResult == "Fail" then
+		codeTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
+		codeTaskLabel.Text = string.format("Override Task %d/%d", completedStages, totalStages)
+	else
+		codeTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
+		codeTaskLabel.Text = string.format("Override Task %d/%d", completedStages, totalStages)
+	end
+
+	setFill(codeTaskFill, getCodeTaskProgressRatio())
 end
 
 local function computeMarkerPosition(elapsedTime, markerWidthScale, swingSpeed)
@@ -510,6 +588,8 @@ end
 updateRoleLabel()
 updateTaskProgressBar()
 updateSpamTaskProgressBar()
+updatePuzzleTaskProgressBar()
+updateCodeTaskProgressBar()
 updateTimingMiniGame()
 updateSpamMiniGame()
 player:GetAttributeChangedSignal("CurrentRole"):Connect(updateRoleLabel)
@@ -523,6 +603,12 @@ player:GetAttributeChangedSignal("TaskAttemptStartedAt"):Connect(updateTimingMin
 player:GetAttributeChangedSignal("SpamTaskCompletedStages"):Connect(updateSpamTaskProgressBar)
 player:GetAttributeChangedSignal("SpamTaskTotalStages"):Connect(updateSpamTaskProgressBar)
 player:GetAttributeChangedSignal("SpamTaskLastResult"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("PuzzleTaskCompletedStages"):Connect(updatePuzzleTaskProgressBar)
+player:GetAttributeChangedSignal("PuzzleTaskTotalStages"):Connect(updatePuzzleTaskProgressBar)
+player:GetAttributeChangedSignal("PuzzleTaskLastResult"):Connect(updatePuzzleTaskProgressBar)
+player:GetAttributeChangedSignal("CodeTaskCompletedStages"):Connect(updateCodeTaskProgressBar)
+player:GetAttributeChangedSignal("CodeTaskTotalStages"):Connect(updateCodeTaskProgressBar)
+player:GetAttributeChangedSignal("CodeTaskLastResult"):Connect(updateCodeTaskProgressBar)
 player:GetAttributeChangedSignal("SpamTaskActive"):Connect(updateSpamMiniGame)
 player:GetAttributeChangedSignal("SpamTaskCurrentFill"):Connect(updateSpamMiniGame)
 player:GetAttributeChangedSignal("SpamTaskCurrentStage"):Connect(updateSpamMiniGame)
