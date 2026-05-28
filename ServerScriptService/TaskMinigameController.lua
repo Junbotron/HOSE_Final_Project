@@ -56,6 +56,7 @@ local function getPlayerState(player)
 		greenWidth = taskConfig.GreenWidthMax,
 		spamFill = 0,
 		spamLastUpdatedAt = 0,
+		puzzleStage = nil,
 		codeDefinition = nil,
 		codeRevealCount = 0,
 	}
@@ -114,14 +115,88 @@ local function getCodeStage(stageIndex)
 	return codeConfig.Stages[stageIndex]
 end
 
-local function encodePuzzleDefinition(stageIndex)
-	local stage = getPuzzleStage(stageIndex)
+local function getPuzzleRequiredCoverage(stageIndex)
+	local coverageByStage = puzzleConfig.RequiredCoverageByStage
+	if type(coverageByStage) == "table" then
+		local stageCoverage = tonumber(coverageByStage[stageIndex])
+		if stageCoverage then
+			return clamp(stageCoverage, 0, 1)
+		end
+	end
+
+	local defaultCoverage = tonumber(puzzleConfig.RequiredCoverage)
+	if defaultCoverage then
+		return clamp(defaultCoverage, 0, 1)
+	end
+
+	return 0
+end
+
+local function transformPuzzleCoordinate(size, row, column, variant)
+	if variant == 1 then
+		return row, column
+	elseif variant == 2 then
+		return column, (size - row + 1)
+	elseif variant == 3 then
+		return (size - row + 1), (size - column + 1)
+	elseif variant == 4 then
+		return (size - column + 1), row
+	elseif variant == 5 then
+		return row, (size - column + 1)
+	elseif variant == 6 then
+		return (size - row + 1), column
+	elseif variant == 7 then
+		return column, row
+	else
+		return (size - column + 1), (size - row + 1)
+	end
+end
+
+local function buildRuntimePuzzleStage(stageIndex)
+	local baseStage = getPuzzleStage(stageIndex)
+	if not baseStage then
+		return nil
+	end
+
+	local transformedPairs = {}
+	local transformVariant = randomGenerator:NextInteger(1, 8)
+
+	for _, pair in ipairs(baseStage.Pairs) do
+		local startRow, startColumn = transformPuzzleCoordinate(baseStage.Size, pair.Endpoints[1][1], pair.Endpoints[1][2], transformVariant)
+		local endRow, endColumn = transformPuzzleCoordinate(baseStage.Size, pair.Endpoints[2][1], pair.Endpoints[2][2], transformVariant)
+
+		table.insert(transformedPairs, {
+			Id = pair.Id,
+			Color = pair.Color,
+			Endpoints = {
+				{ startRow, startColumn },
+				{ endRow, endColumn },
+			},
+		})
+	end
+
+	for index = #transformedPairs, 2, -1 do
+		local swapIndex = randomGenerator:NextInteger(1, index)
+		transformedPairs[index], transformedPairs[swapIndex] = transformedPairs[swapIndex], transformedPairs[index]
+	end
+
+	local runtimeStage = {
+		StageIndex = stageIndex,
+		Size = baseStage.Size,
+		Pairs = transformedPairs,
+		RequiredCoverage = getPuzzleRequiredCoverage(stageIndex),
+	}
+
+	return runtimeStage
+end
+
+local function encodePuzzleDefinition(stage)
 	if not stage then
 		return ""
 	end
 
 	return HttpService:JSONEncode({
-		stage = stageIndex,
+		stage = stage.StageIndex,
 		size = stage.Size,
 		pairs = stage.Pairs,
 	})
@@ -160,13 +235,56 @@ local function buildCodeDefinition(stageIndex)
 		totalInputs = 0,
 	}
 
+	local letterCounts = {}
+	for _, letter in ipairs(codeConfig.Letters) do
+		letterCounts[letter] = 0
+	end
+
+	local function chooseNextCodeLetter(currentSequence)
+		local eligibleLetters = {}
+		local lastLetter = currentSequence[#currentSequence]
+		local secondLastLetter = currentSequence[#currentSequence - 1]
+
+		for _, letter in ipairs(codeConfig.Letters) do
+			local wouldCreateTriple = lastLetter == letter and secondLastLetter == letter
+			local underSoftCap = letterCounts[letter] < 3
+			if not wouldCreateTriple and underSoftCap then
+				table.insert(eligibleLetters, letter)
+			end
+		end
+
+		if #eligibleLetters == 0 then
+			for _, letter in ipairs(codeConfig.Letters) do
+				local wouldCreateTriple = lastLetter == letter and secondLastLetter == letter
+				if not wouldCreateTriple then
+					table.insert(eligibleLetters, letter)
+				end
+			end
+		end
+
+		local lowestCount = math.huge
+		for _, letter in ipairs(eligibleLetters) do
+			lowestCount = math.min(lowestCount, letterCounts[letter])
+		end
+
+		local balancedLetters = {}
+		for _, letter in ipairs(eligibleLetters) do
+			if letterCounts[letter] == lowestCount then
+				table.insert(balancedLetters, letter)
+			end
+		end
+
+		local choicePool = #balancedLetters > 0 and balancedLetters or eligibleLetters
+		return choicePool[randomGenerator:NextInteger(1, #choicePool)]
+	end
+
 	for _, lineConfig in ipairs(stage.Lines) do
 		local letters = {}
 		for _ = 1, lineConfig.SequenceLength do
-			local letterIndex = randomGenerator:NextInteger(1, #codeConfig.Letters)
-			local letter = codeConfig.Letters[letterIndex]
+			local letter = chooseNextCodeLetter(definition.sequence)
 			table.insert(letters, letter)
 			table.insert(definition.sequence, letter)
+			letterCounts[letter] = (letterCounts[letter] or 0) + 1
 		end
 
 		table.insert(definition.lines, {
@@ -299,6 +417,18 @@ local function validatePuzzleSubmission(stage, submission)
 
 		seenPairs[pairId] = true
 		validatedCount = validatedCount + 1
+	end
+
+	local occupiedCount = 0
+	for _ in pairs(occupiedCells) do
+		occupiedCount = occupiedCount + 1
+	end
+
+	local gridCellCount = stage.Size * stage.Size
+	local requiredCoverage = clamp(stage.RequiredCoverage or 0, 0, 1)
+	local requiredCells = math.ceil(gridCellCount * requiredCoverage)
+	if occupiedCount < requiredCells then
+		return false
 	end
 
 	return validatedCount == #stage.Pairs
@@ -510,14 +640,17 @@ local function tapSpamRound(player)
 end
 
 local function startPuzzleStage(player, stageIndex)
-	local stage = getPuzzleStage(stageIndex)
+	local stage = buildRuntimePuzzleStage(stageIndex)
 	if not stage then
 		return false
 	end
 
+	local state = getPlayerState(player)
+	state.puzzleStage = stage
+
 	player:SetAttribute("PuzzleTaskCurrentStage", stageIndex)
 	player:SetAttribute("PuzzleTaskGridSize", stage.Size)
-	player:SetAttribute("PuzzleTaskDefinitionJson", encodePuzzleDefinition(stageIndex))
+	player:SetAttribute("PuzzleTaskDefinitionJson", encodePuzzleDefinition(stage))
 	player:SetAttribute("PuzzleTaskActive", true)
 	player:SetAttribute("PuzzleTaskLastResult", "Running")
 	return true
@@ -549,6 +682,9 @@ local function cancelPuzzleRound(player)
 		return
 	end
 
+	local state = getPlayerState(player)
+	state.puzzleStage = nil
+
 	player:SetAttribute("PuzzleTaskActive", false)
 	player:SetAttribute("PuzzleTaskGridSize", 0)
 	player:SetAttribute("PuzzleTaskDefinitionJson", "")
@@ -562,7 +698,15 @@ local function submitPuzzleRound(player, submissionJson)
 	end
 
 	local currentStage = math.min(getPuzzleCompletedStages(player) + 1, puzzleConfig.TotalStages)
-	local stage = getPuzzleStage(currentStage)
+	local state = getPlayerState(player)
+	local stage = state.puzzleStage
+	if stage and stage.StageIndex ~= currentStage then
+		stage = nil
+	end
+	if not stage then
+		stage = buildRuntimePuzzleStage(currentStage)
+		state.puzzleStage = stage
+	end
 	if not stage then
 		return
 	end
@@ -585,6 +729,7 @@ local function submitPuzzleRound(player, submissionJson)
 	player:SetAttribute("PuzzleTaskCompletedStages", completedStages)
 
 	if completedStages >= puzzleConfig.TotalStages then
+		state.puzzleStage = nil
 		player:SetAttribute("PuzzleTaskActive", false)
 		player:SetAttribute("PuzzleTaskGridSize", 0)
 		player:SetAttribute("PuzzleTaskDefinitionJson", "")

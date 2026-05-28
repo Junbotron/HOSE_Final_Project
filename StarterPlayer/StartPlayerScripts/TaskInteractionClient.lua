@@ -257,10 +257,10 @@ local codeDefinitionJson = ""
 local codeLineViews = {}
 local codeButtons = {}
 local CODE_KEY_TO_LETTER = {
-	[Enum.KeyCode.I] = "I",
+	[Enum.KeyCode.U] = "U",
+	[Enum.KeyCode.H] = "H",
 	[Enum.KeyCode.J] = "J",
 	[Enum.KeyCode.K] = "K",
-	[Enum.KeyCode.L] = "L",
 }
 
 local function cellKey(row, column)
@@ -371,7 +371,7 @@ local function updateCodeVisuals()
 	elseif lastResult == "StageClear" then
 		codeStatusLabel.Text = "Stage clear. Continue the override."
 	else
-		codeStatusLabel.Text = "Press I, J, K, L in order with no mistakes."
+		codeStatusLabel.Text = "Press U, H, J, K in order with no mistakes."
 	end
 
 	setCodeButtonsEnabled(isActive)
@@ -634,10 +634,15 @@ local function extendActivePath(row, column)
 
 	local existingIndex = findCellIndex(pathCells, row, column)
 	if existingIndex then
+		-- Retract path back to this cell (standard flow-puzzle behaviour)
 		for index = #pathCells, existingIndex + 1, -1 do
 			table.remove(pathCells, index)
 		end
 		updatePuzzleBoardVisuals()
+		return
+	end
+
+	if isPathComplete(activeDragPairId) then
 		return
 	end
 
@@ -655,6 +660,10 @@ local function extendActivePath(row, column)
 
 	table.insert(pathCells, { row = row, column = column })
 	updatePuzzleBoardVisuals()
+	-- Auto-submit the moment every pair is connected
+	if allPuzzlePathsComplete() then
+		trySubmitPuzzle()
+	end
 end
 
 local function beginPathDrag(pairId, row, column)
@@ -663,9 +672,27 @@ local function beginPathDrag(pairId, row, column)
 	end
 
 	activeDragPairId = pairId
-	puzzlePaths[pairId] = {
-		{ row = row, column = column },
-	}
+	local existingPath = puzzlePaths[pairId]
+
+	if existingPath and #existingPath >= 2 then
+		local firstCell = existingPath[1]
+		local lastCell = existingPath[#existingPath]
+		if lastCell.row == row and lastCell.column == column then
+			-- Already at the tip end – resume drag without resetting
+		elseif firstCell.row == row and firstCell.column == column then
+			-- Clicked the origin end – reverse so dragging starts from here
+			local reversed = {}
+			for i = #existingPath, 1, -1 do
+				table.insert(reversed, existingPath[i])
+			end
+			puzzlePaths[pairId] = reversed
+		else
+			puzzlePaths[pairId] = { { row = row, column = column } }
+		end
+	else
+		puzzlePaths[pairId] = { { row = row, column = column } }
+	end
+
 	updatePuzzleBoardVisuals()
 end
 
@@ -806,7 +833,7 @@ local function openTaskPanel(prompt)
 		hintLabel.Text = "Drag to connect matching numbers. Move away to close"
 		taskEvent:FireServer("PuzzleStart")
 	elseif isCode then
-		hintLabel.Text = "Press I, J, K, and L in order. Wrong input rerolls the stage"
+		hintLabel.Text = "Press U, H, J, and K in order. Wrong input rerolls the stage"
 		taskEvent:FireServer("CodeStart")
 	else
 		hintLabel.Text = "Move away to close"
@@ -889,7 +916,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 	taskEvent:FireServer("CodeInput", letter)
 end)
 
-for _, letter in ipairs({ "I", "J", "K", "L" }) do
+for _, letter in ipairs({ "U", "H", "J", "K" }) do
 	local button = Instance.new("TextButton")
 	button.Name = string.format("Button%s", letter)
 	button.Size = UDim2.fromOffset(84, 40)
