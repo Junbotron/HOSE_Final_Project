@@ -26,6 +26,14 @@ local function getTaskTotalSegments()
 	return math.max(1, player:GetAttribute("TaskTotalSegments") or 1)
 end
 
+local function getTimingTasksTotalCount()
+	return math.max(1, player:GetAttribute("TimingTasksTotalCount") or 1)
+end
+
+local function getTimingTasksCompletedCount()
+	return math.floor(clamp(player:GetAttribute("TimingTasksCompletedCount") or 0, 0, getTimingTasksTotalCount()))
+end
+
 local function getTaskProgressSegments()
 	return math.floor(clamp(player:GetAttribute("TaskProgressSegments") or 0, 0, getTaskTotalSegments()))
 end
@@ -42,6 +50,14 @@ local function getSpamTaskTotalStages()
 	return math.max(1, player:GetAttribute("SpamTaskTotalStages") or 1)
 end
 
+local function getSpamTasksTotalCount()
+	return math.max(1, player:GetAttribute("SpamTasksTotalCount") or 1)
+end
+
+local function getSpamTasksCompletedCount()
+	return math.floor(clamp(player:GetAttribute("SpamTasksCompletedCount") or 0, 0, getSpamTasksTotalCount()))
+end
+
 local function getSpamTaskCompletedStages()
 	return math.floor(clamp(player:GetAttribute("SpamTaskCompletedStages") or 0, 0, getSpamTaskTotalStages()))
 end
@@ -50,12 +66,28 @@ local function getPuzzleTaskTotalStages()
 	return math.max(1, player:GetAttribute("PuzzleTaskTotalStages") or 1)
 end
 
+local function getPuzzleTasksTotalCount()
+	return math.max(1, player:GetAttribute("PuzzleTasksTotalCount") or 1)
+end
+
+local function getPuzzleTasksCompletedCount()
+	return math.floor(clamp(player:GetAttribute("PuzzleTasksCompletedCount") or 0, 0, getPuzzleTasksTotalCount()))
+end
+
 local function getPuzzleTaskCompletedStages()
 	return math.floor(clamp(player:GetAttribute("PuzzleTaskCompletedStages") or 0, 0, getPuzzleTaskTotalStages()))
 end
 
 local function getCodeTaskTotalStages()
 	return math.max(1, player:GetAttribute("CodeTaskTotalStages") or 1)
+end
+
+local function getCodeTasksTotalCount()
+	return math.max(1, player:GetAttribute("CodeTasksTotalCount") or 1)
+end
+
+local function getCodeTasksCompletedCount()
+	return math.floor(clamp(player:GetAttribute("CodeTasksCompletedCount") or 0, 0, getCodeTasksTotalCount()))
 end
 
 local function getCodeTaskCompletedStages()
@@ -298,19 +330,19 @@ local spamFillCorner = ensureInstance(spamFillTrack, "UICorner", "Corner")
 spamFillCorner.CornerRadius = UDim.new(1, 0)
 
 local function getTaskProgressRatio()
-	return getTaskProgressSegments() / getTaskTotalSegments()
+	return getTimingTasksCompletedCount() / getTimingTasksTotalCount()
 end
 
 local function getSpamTaskProgressRatio()
-	return getSpamTaskCompletedStages() / getSpamTaskTotalStages()
+	return getSpamTasksCompletedCount() / getSpamTasksTotalCount()
 end
 
 local function getPuzzleTaskProgressRatio()
-	return getPuzzleTaskCompletedStages() / getPuzzleTaskTotalStages()
+	return getPuzzleTasksCompletedCount() / getPuzzleTasksTotalCount()
 end
 
 local function getCodeTaskProgressRatio()
-	return getCodeTaskCompletedStages() / getCodeTaskTotalStages()
+	return getCodeTasksCompletedCount() / getCodeTasksTotalCount()
 end
 
 local function setFill(fill, ratio)
@@ -318,77 +350,61 @@ local function setFill(fill, ratio)
 end
 
 local function updateTaskProgressBar()
-	local taskSegmentsCompleted = getTaskProgressSegments()
-	local taskTotalSegments = getTaskTotalSegments()
-	local lastTaskResult = player:GetAttribute("TaskLastResult")
+	local completedTaskCount = getTimingTasksCompletedCount()
+	local totalTaskCount = getTimingTasksTotalCount()
 	local taskRatio = getTaskProgressRatio()
 
-	if taskSegmentsCompleted >= taskTotalSegments then
+	if completedTaskCount >= totalTaskCount then
 		taskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		taskLabel.Text = "Task Progress Complete"
-	elseif lastTaskResult == "Fail" then
-		taskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
-		taskLabel.Text = string.format("Task Progress %d/%d", taskSegmentsCompleted, taskTotalSegments)
+		taskLabel.Text = "Timing Tasks Complete"
 	else
 		taskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		taskLabel.Text = string.format("Task Progress %d/%d", taskSegmentsCompleted, taskTotalSegments)
+		taskLabel.Text = string.format("Timing Tasks %d/%d", completedTaskCount, totalTaskCount)
 	end
 
 	setFill(taskFill, taskRatio)
 end
 
 local function updateSpamTaskProgressBar()
-	local completedStages = getSpamTaskCompletedStages()
-	local totalStages = getSpamTaskTotalStages()
-	local lastResult = player:GetAttribute("SpamTaskLastResult")
+	local completedTaskCount = getSpamTasksCompletedCount()
+	local totalTaskCount = getSpamTasksTotalCount()
 
-	if completedStages >= totalStages then
+	if completedTaskCount >= totalTaskCount then
 		spamTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		spamTaskLabel.Text = "Spam Task Complete"
-	elseif lastResult == "Fail" then
-		spamTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
-		spamTaskLabel.Text = string.format("Spam Task %d/%d", completedStages, totalStages)
+		spamTaskLabel.Text = "Spam Tasks Complete"
 	else
 		spamTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		spamTaskLabel.Text = string.format("Spam Task %d/%d", completedStages, totalStages)
+		spamTaskLabel.Text = string.format("Spam Tasks %d/%d", completedTaskCount, totalTaskCount)
 	end
 
 	setFill(spamTaskFill, getSpamTaskProgressRatio())
 end
 
 local function updatePuzzleTaskProgressBar()
-	local completedStages = getPuzzleTaskCompletedStages()
-	local totalStages = getPuzzleTaskTotalStages()
-	local lastResult = player:GetAttribute("PuzzleTaskLastResult")
+	local completedTaskCount = getPuzzleTasksCompletedCount()
+	local totalTaskCount = getPuzzleTasksTotalCount()
 
-	if completedStages >= totalStages then
+	if completedTaskCount >= totalTaskCount then
 		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		puzzleTaskLabel.Text = "Grid Task Complete"
-	elseif lastResult == "Fail" then
-		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
-		puzzleTaskLabel.Text = string.format("Grid Task %d/%d", completedStages, totalStages)
+		puzzleTaskLabel.Text = "Clicker Tasks Complete"
 	else
 		puzzleTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		puzzleTaskLabel.Text = string.format("Grid Task %d/%d", completedStages, totalStages)
+		puzzleTaskLabel.Text = string.format("Clicker Tasks %d/%d", completedTaskCount, totalTaskCount)
 	end
 
 	setFill(puzzleTaskFill, getPuzzleTaskProgressRatio())
 end
 
 local function updateCodeTaskProgressBar()
-	local completedStages = getCodeTaskCompletedStages()
-	local totalStages = getCodeTaskTotalStages()
-	local lastResult = player:GetAttribute("CodeTaskLastResult")
+	local completedTaskCount = getCodeTasksCompletedCount()
+	local totalTaskCount = getCodeTasksTotalCount()
 
-	if completedStages >= totalStages then
+	if completedTaskCount >= totalTaskCount then
 		codeTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		codeTaskLabel.Text = "Override Task Complete"
-	elseif lastResult == "Fail" then
-		codeTaskFill.BackgroundColor3 = Color3.fromRGB(201, 110, 110)
-		codeTaskLabel.Text = string.format("Override Task %d/%d", completedStages, totalStages)
+		codeTaskLabel.Text = "Override Tasks Complete"
 	else
 		codeTaskFill.BackgroundColor3 = Color3.fromRGB(87, 184, 98)
-		codeTaskLabel.Text = string.format("Override Task %d/%d", completedStages, totalStages)
+		codeTaskLabel.Text = string.format("Override Tasks %d/%d", completedTaskCount, totalTaskCount)
 	end
 
 	setFill(codeTaskFill, getCodeTaskProgressRatio())
@@ -440,41 +456,11 @@ local function updateSpamHint(isActive)
 end
 
 local function updateTimingMiniGame()
-	local isActive = player:GetAttribute("TaskMinigameActive") == true
-	timingPanel.Visible = isActive
-	updateTimingHint(isActive)
-
-	if not isActive then
-		return
-	end
-
-	local greenStart = clamp(player:GetAttribute("TaskGreenStart") or 0, 0, 1)
-	local greenWidth = clamp(player:GetAttribute("TaskGreenWidth") or 0, 0, 1)
-	local markerWidthScale = getTaskMarkerWidthScale()
-	local swingSpeed = getTaskSwingSpeed()
-	local startedAt = player:GetAttribute("TaskAttemptStartedAt") or 0
-	local elapsedTime = math.max(0, Workspace:GetServerTimeNow() - startedAt)
-	local markerPosition = computeMarkerPosition(elapsedTime, markerWidthScale, swingSpeed)
-
-	timingGreenZone.Position = UDim2.fromScale(greenStart, 0)
-	timingGreenZone.Size = UDim2.fromScale(greenWidth, 1)
-	timingMarker.Position = UDim2.fromScale(markerPosition, 0)
-	timingMarker.Size = UDim2.fromScale(markerWidthScale, 1)
+	timingPanel.Visible = false
 end
 
 local function updateSpamMiniGame()
-	local isActive = player:GetAttribute("SpamTaskActive") == true
-	local goalStart = clamp(player:GetAttribute("SpamTaskGoalStart") or 1, 0, 1)
-	local goalWidth = clamp(player:GetAttribute("SpamTaskGoalWidth") or 0, 0, 1)
-	local currentFill = clamp(player:GetAttribute("SpamTaskCurrentFill") or 0, 0, 1)
-
-	spamPanel.Visible = isActive
-	updateSpamHint(isActive)
-	spamTitle.Text = string.format("Spam Task Stage %d/%d", math.min(player:GetAttribute("SpamTaskCurrentStage") or 1, getSpamTaskTotalStages()), getSpamTaskTotalStages())
-	spamGoalZone.Position = UDim2.fromScale(goalStart, 0)
-	spamGoalZone.Size = UDim2.fromScale(goalWidth, 1)
-	spamFillTrack.Position = UDim2.fromScale(0, 0)
-	spamFillTrack.Size = UDim2.fromScale(currentFill, 1)
+	spamPanel.Visible = false
 end
 
 local function updateRoleLabel()
@@ -593,23 +579,21 @@ updateCodeTaskProgressBar()
 updateTimingMiniGame()
 updateSpamMiniGame()
 player:GetAttributeChangedSignal("CurrentRole"):Connect(updateRoleLabel)
-player:GetAttributeChangedSignal("TaskProgressSegments"):Connect(updateTaskProgressBar)
-player:GetAttributeChangedSignal("TaskTotalSegments"):Connect(updateTaskProgressBar)
-player:GetAttributeChangedSignal("TaskLastResult"):Connect(updateTaskProgressBar)
+player:GetAttributeChangedSignal("TimingTasksCompletedCount"):Connect(updateTaskProgressBar)
+player:GetAttributeChangedSignal("TimingTasksTotalCount"):Connect(updateTaskProgressBar)
 player:GetAttributeChangedSignal("TaskMinigameActive"):Connect(updateTimingMiniGame)
+player:GetAttributeChangedSignal("ActiveMinigameId"):Connect(updateTimingMiniGame)
 player:GetAttributeChangedSignal("TaskGreenStart"):Connect(updateTimingMiniGame)
 player:GetAttributeChangedSignal("TaskGreenWidth"):Connect(updateTimingMiniGame)
 player:GetAttributeChangedSignal("TaskAttemptStartedAt"):Connect(updateTimingMiniGame)
-player:GetAttributeChangedSignal("SpamTaskCompletedStages"):Connect(updateSpamTaskProgressBar)
-player:GetAttributeChangedSignal("SpamTaskTotalStages"):Connect(updateSpamTaskProgressBar)
-player:GetAttributeChangedSignal("SpamTaskLastResult"):Connect(updateSpamTaskProgressBar)
-player:GetAttributeChangedSignal("PuzzleTaskCompletedStages"):Connect(updatePuzzleTaskProgressBar)
-player:GetAttributeChangedSignal("PuzzleTaskTotalStages"):Connect(updatePuzzleTaskProgressBar)
-player:GetAttributeChangedSignal("PuzzleTaskLastResult"):Connect(updatePuzzleTaskProgressBar)
-player:GetAttributeChangedSignal("CodeTaskCompletedStages"):Connect(updateCodeTaskProgressBar)
-player:GetAttributeChangedSignal("CodeTaskTotalStages"):Connect(updateCodeTaskProgressBar)
-player:GetAttributeChangedSignal("CodeTaskLastResult"):Connect(updateCodeTaskProgressBar)
+player:GetAttributeChangedSignal("SpamTasksCompletedCount"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("SpamTasksTotalCount"):Connect(updateSpamTaskProgressBar)
+player:GetAttributeChangedSignal("PuzzleTasksCompletedCount"):Connect(updatePuzzleTaskProgressBar)
+player:GetAttributeChangedSignal("PuzzleTasksTotalCount"):Connect(updatePuzzleTaskProgressBar)
+player:GetAttributeChangedSignal("CodeTasksCompletedCount"):Connect(updateCodeTaskProgressBar)
+player:GetAttributeChangedSignal("CodeTasksTotalCount"):Connect(updateCodeTaskProgressBar)
 player:GetAttributeChangedSignal("SpamTaskActive"):Connect(updateSpamMiniGame)
+player:GetAttributeChangedSignal("ActiveMinigameId"):Connect(updateSpamMiniGame)
 player:GetAttributeChangedSignal("SpamTaskCurrentFill"):Connect(updateSpamMiniGame)
 player:GetAttributeChangedSignal("SpamTaskCurrentStage"):Connect(updateSpamMiniGame)
 player:GetAttributeChangedSignal("SpamTaskGoalStart"):Connect(updateSpamMiniGame)
@@ -624,15 +608,11 @@ UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
 		if player:GetAttribute("ActiveMinigameId") ~= 2 then return end
 		if player:GetAttribute("SpamTaskActive") == true then
 			taskEvent:FireServer("SpamTap")
-		else
-			taskEvent:FireServer("SpamStart")
 		end
 	elseif input.KeyCode == Enum.KeyCode.R then
 		if player:GetAttribute("ActiveMinigameId") ~= 1 then return end
 		if player:GetAttribute("TaskMinigameActive") == true then
 			taskEvent:FireServer("Resolve")
-		else
-			taskEvent:FireServer("Start")
 		end
 	end
 end)
